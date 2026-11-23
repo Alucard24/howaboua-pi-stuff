@@ -152,13 +152,24 @@ function prepareStructuredSkills(
 	const sections = (options.sections ??= {});
 	const content = buildSkillsContent(skills);
 	delete sections["codex_skills"];
+	const readers = ["read", "bash"];
+	// Pi renders an indirect skills section for hidden readers. In Structured
+	// mode keep the existing Codex skill catalog instead of a second catalog.
+	if (
+		mode === "normal" &&
+		readers.some((name) => options.hiddenTools.includes(name))
+	)
+		options.skills = [];
 	if (!content) {
 		delete sections["skill_catalog"];
 		return;
 	}
 	const piWillRenderSkills = () =>
-		options.selectedTools.includes("read") ||
-		options.selectedTools.includes("bash");
+		readers.some(
+			(name) =>
+				options.selectedTools.includes(name) &&
+				(mode !== "normal" || !options.hiddenTools.includes(name)),
+		);
 	const codexCanReadSkills = () =>
 		mode === "normal"
 			? options.selectedTools.includes("exec_command")

@@ -16,6 +16,7 @@ import type { LatestNativeCompactionResolution } from "./details-store.ts";
 import { rewriteResponsesPayloadWithNativeReplay } from "../replay/payload-rewrite.ts";
 import { convertResponsesTools } from "../../providers/openai-responses/shared.ts";
 import {
+	omitHiddenToolDeclarations,
 	serializeActiveSessionToResponsesInput,
 	type NativeCompactionRequestOptions,
 	type ResponsesInputItem,
@@ -23,6 +24,7 @@ import {
 } from "./serializer.ts";
 import { resolveCodexRuntimePlanForState } from "../activation/runtime-plan.ts";
 import type { AdapterState } from "../activation/state.ts";
+import { structuredHiddenNativeTools } from "../activation/tool-set.ts";
 import { resolveFastModeServiceTier } from "../activation/fast-mode.ts";
 import { getActiveToolsInActiveOrder } from "../active-tools.ts";
 import { resolveCanonicalCompactionPromptInput } from "../../providers/openai-codex/session-continuity.ts";
@@ -35,13 +37,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-function buildCompactionTools(
+function getCompactionTools(
 	pi: ExtensionAPI,
 	codeMode: boolean,
-): unknown[] | undefined {
-	const tools = getActiveToolsInActiveOrder(pi, codeMode);
-	if (tools.length === 0) return undefined;
-	return convertResponsesTools(tools, { strict: false });
+	hidden: readonly string[],
+) {
+	return getActiveToolsInActiveOrder(pi, codeMode).filter(
+		({ name }) => !hidden.includes(name),
+	);
 }
 
 function buildCompactionReasoning(
@@ -104,7 +107,8 @@ export function buildCompactionRequestOptions(
 	codeMode: boolean,
 	branchEntries: SessionEntry[],
 ): NativeCompactionRequestOptions {
-	const tools = buildCompactionTools(pi, codeMode);
+	const hidden = structuredHiddenNativeTools(state, pi.getActiveTools());
+	const tools = getCompactionTools(pi, codeMode, hidden);
 	const reasoning = buildCompactionReasoning(
 		pi,
 		ctx,
@@ -129,7 +133,9 @@ export function buildCompactionRequestOptions(
 		),
 		...(serviceTier ? { service_tier: serviceTier } : {}),
 		text: { verbosity: state.config.openai.verbosity },
-		...(tools ? { tools } : {}),
+		...(tools.length
+			? { tools: convertResponsesTools(tools, { strict: false }) }
+			: {}),
 		...(reasoning ? { reasoning } : {}),
 	};
 }
@@ -160,12 +166,17 @@ export function buildCompactionTranscript(
 		});
 	}
 
+	const hidden = structuredHiddenNativeTools(state, pi.getActiveTools());
 	const current = getCurrentSystemMessage(
 		projectCodexDeveloperHistory(branchEntries),
 	);
 	if (current)
-		return normalizeContext({ messages: [orderProjectContextLast(current)] });
-	const tools = getActiveToolsInActiveOrder(pi, codeMode);
+		return normalizeContext({
+			messages: [
+				orderProjectContextLast(omitHiddenToolDeclarations(current, hidden)),
+			],
+		});
+	const tools = getCompactionTools(pi, codeMode, hidden);
 	return normalizeContext({
 		systemPrompt: ctx.getSystemPrompt(),
 		messages: [],

@@ -1,6 +1,13 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ToolLoadoutChanges,
+} from "@earendil-works/pi-coding-agent";
 import type { CodexConversionConfig } from "../adapter/activation/config.ts";
+import {
+	DEFAULT_TOOL_NAMES,
+	structuredHiddenNativeTools,
+} from "../adapter/activation/tool-set.ts";
 import {
 	registerCodexToolProviderPolicy,
 	registerCodexToolProviderResolver,
@@ -9,11 +16,11 @@ import {
 import { isResponsesModel } from "../adapter/prompt/codex-model.ts";
 import {
 	registerApplyPatchResultEvent,
-	registerApplyPatchTool,
+	createApplyPatchTool,
 } from "../tools/apply-patch/tool.ts";
-import { registerExecCommandTool } from "../tools/exec/command-tool.ts";
-import { registerWriteStdinTool } from "../tools/exec/write-stdin-tool.ts";
-import { registerViewImageTool } from "../tools/view-image/tool.ts";
+import { createExecCommandTool } from "../tools/exec/command-tool.ts";
+import { createWriteStdinTool } from "../tools/exec/write-stdin-tool.ts";
+import { createViewImageTool } from "../tools/view-image/tool.ts";
 import type { CodexExtensionRuntime } from "./runtime.ts";
 
 export interface CodexToolRegistration {
@@ -41,6 +48,24 @@ export function registerCodexTools(
 ): CodexToolRegistration {
 	registerApplyPatchResultEvent(pi);
 	pi.registerTool(runtime.autoReasoning.tool);
+	const prepareLoadout = (): ToolLoadoutChanges | undefined =>
+		runtime.state.appliedRuntimeKind === "normal"
+			? { hiddenDeclarations: DEFAULT_TOOL_NAMES }
+			: undefined;
+	// Hidden declarations still leave tools callable in Pi. Preserve the
+	// Structured execution surface, including calls nested by other tools.
+	pi.on("tool_call", (event) => {
+		if (
+			structuredHiddenNativeTools(runtime.state, pi.getActiveTools()).includes(
+				event.toolName,
+			)
+		)
+			return {
+				block: true,
+				reason: "Use the Structured Codex tools on this model.",
+			};
+		return undefined;
+	});
 	const allowsProvider = (model: Model<Api> | undefined) =>
 		isExplicitlyConfiguredToolProvider(model, runtime.state.config);
 	const unregisterProviderPolicy = registerCodexToolProviderPolicy(
@@ -58,21 +83,33 @@ export function registerCodexTools(
 		customRendering: config.ui.toolRenaming,
 	});
 	const registerCore = (config: CodexConversionConfig) => {
-		registerApplyPatchTool(pi, {
-			customRustBinariesDir: config.tools.customRustBinariesDir,
-			showDiffWhenCollapsed: config.ui.toolDetails === "preview",
+		pi.registerTool({
+			...createApplyPatchTool({
+				customRustBinariesDir: config.tools.customRustBinariesDir,
+				showDiffWhenCollapsed: config.ui.toolDetails === "preview",
+			}),
+			prepareLoadout,
 		});
-		registerExecCommandTool(pi, runtime.tracker, runtime.sessions, {
-			...renderOptions(config),
-			showOutputWhenCollapsed: true,
+		pi.registerTool({
+			...createExecCommandTool(runtime.tracker, runtime.sessions, {
+				...renderOptions(config),
+				showOutputWhenCollapsed: true,
+			}),
+			prepareLoadout,
 		});
-		registerWriteStdinTool(pi, runtime.sessions, {
-			showOutputWhenCollapsed: true,
+		pi.registerTool({
+			...createWriteStdinTool(runtime.sessions, {
+				showOutputWhenCollapsed: true,
+			}),
+			prepareLoadout,
 		});
-		registerViewImageTool(pi, {
-			customRustBinariesDir: config.tools.customRustBinariesDir,
-			describeForTextModels: config.tools.viewImageFallback,
-			...renderOptions(config),
+		pi.registerTool({
+			...createViewImageTool({
+				customRustBinariesDir: config.tools.customRustBinariesDir,
+				describeForTextModels: config.tools.viewImageFallback,
+				...renderOptions(config),
+			}),
+			prepareLoadout,
 		});
 	};
 	registerCore(runtime.state.config);

@@ -78,11 +78,13 @@
 				"src/realtime-voice.ts",
 				"src/host-settings.ts",
 				"src/codex-usage/analyse.ts",
+				"tests/**/*.test.ts",
 				"scripts/**/*.mjs",
 				"examples/custom-tools/**/*.mjs",
 			],
 			"project": [
 				"src/**/*.ts",
+				"tests/**/*.test.ts",
 				"scripts/**/*.mjs",
 				"examples/custom-tools/**/*.mjs",
 			],
