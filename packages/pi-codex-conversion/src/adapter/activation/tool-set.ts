@@ -1,4 +1,5 @@
 import type { CodexUsageStatus } from "../../codex-usage/payload.ts";
+import type { AdapterState } from "./state.ts";
 
 export const STATUS_KEY = "codex-adapter";
 export const STATUS_TEXT = "Codex adapter";
@@ -79,3 +80,16 @@ export const CORE_ADAPTER_TOOL_NAMES = [
 export const CODE_MODE_TOOL_NAMES = ["exec", "wait"];
 export const NOTEBOOK_MODE_TOOL_NAMES = [...CODE_MODE_TOOL_NAMES, "notebook"];
 export const VIEW_IMAGE_TOOL_NAME = "view_image";
+
+export function structuredHiddenNativeTools(
+	state: Pick<AdapterState, "appliedRuntimeKind">,
+	active: readonly string[],
+): readonly string[] {
+	return state.appliedRuntimeKind === "normal" &&
+		active.some(
+			(name) =>
+				CORE_ADAPTER_TOOL_NAMES.includes(name) || name === VIEW_IMAGE_TOOL_NAME,
+		)
+		? DEFAULT_TOOL_NAMES
+		: [];
+}

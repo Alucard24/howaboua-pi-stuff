@@ -64,7 +64,13 @@ function enableAdapter(
 			plan.kind === "normal"
 				? restoreTools(state.previousToolNames ?? [], projectedTools, owned)
 				: projectedTools;
-		tools = mergeAdapterTools(activeTools, plan.toolNames, owned);
+		// Pi persists active tools on reload, resume, and tree navigation. In
+		// Structured mode retain native admission; the tool loadout hook hides
+		// their declarations without making a later restoration guess at it.
+		tools =
+			plan.kind === "normal"
+				? mergeToolNames(plan.toolNames, stripAdapterTools(activeTools, owned))
+				: mergeAdapterTools(activeTools, plan.toolNames, owned);
 	}
 	state.adapterOwnedToolNames = plan.ownedToolNames;
 	applyRuntimeTools(pi, state, plan, tools);
@@ -215,8 +221,8 @@ function applyRuntimeTools(
 				name !== "codemode" && !(nativeSearch && name === "tool_search"),
 		);
 	}
-	setActiveTools(pi, projected);
 	state.appliedRuntimeKind = plan.kind;
+	setActiveTools(pi, projected);
 	state.appliedRuntimeToolNames = [...plan.toolNames];
 	state.appliedActiveToolNames = [...pi.getActiveTools()];
 }

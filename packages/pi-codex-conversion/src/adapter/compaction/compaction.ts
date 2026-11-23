@@ -26,6 +26,7 @@ import {
 	resolveCodexRuntimePlanForState,
 } from "../activation/runtime-plan.ts";
 import type { AdapterState } from "../activation/state.ts";
+import { structuredHiddenNativeTools } from "../activation/tool-set.ts";
 import { executeRemoteCompactionV2 } from "./remote-v2-client.ts";
 import { buildRemoteCompactionV2Window } from "./remote-v2-history.ts";
 import { CODE_MODE_EXEC_GRAMMAR_INPUTS } from "../../tools/code-mode/exec-contract.ts";
@@ -262,6 +263,7 @@ async function handleCodexSessionBeforeCompactInner(
 	}
 	const codeMode = isCodeModeRuntime(plan);
 	const serializationOptions: SerializeResponsesMessagesOptions = {
+		hiddenToolNames: structuredHiddenNativeTools(state, pi.getActiveTools()),
 		...(plan.transport === "responses-lite"
 			? { grammarToolInputProperties: CODE_MODE_EXEC_GRAMMAR_INPUTS }
 			: {}),
